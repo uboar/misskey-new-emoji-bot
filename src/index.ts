@@ -126,7 +126,7 @@ export default {
 		if (url.includes('ping')) return await ping(request, env, ctx)
 		if (url.includes('syncallemojis')) return await syncallemojis(request, env, ctx)
 		if (url.includes('newemojitest')) {
-			newEmojiNote(null, env, ctx)
+			await newEmojiNote(null, env, ctx)
 			return new Response("ok")
 		}
 		return new Response("not found");
