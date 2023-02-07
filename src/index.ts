@@ -49,7 +49,7 @@ const newEmojiNote = async (event: ScheduledController | null, env: Env, ctx: Ex
 	let find = -1
 
 	emojis.forEach((elem, index) => {
-		if (gluedEmojiNames.indexOf(elem.name) < 0) {
+		if (gluedEmojiNames.indexOf(" " + elem.name + " ") < 0) {
 			find = index
 		}
 	})
@@ -62,7 +62,7 @@ const newEmojiNote = async (event: ScheduledController | null, env: Env, ctx: Ex
 この絵文字は${emojis[find].category}に分類されています。`
 		}
 
-		if((emojis[find].aliases[0] !== '') && (emojis[find].aliases[0] !== '')){
+		if((emojis[find].aliases[0] !== '') && (emojis[find].aliases[0] !== null)){
 
 			noteText += `
 また、この絵文字は\`${emojis[find].aliases.join(", ")}\`でも出す事が出来ます。`
@@ -72,7 +72,7 @@ const newEmojiNote = async (event: ScheduledController | null, env: Env, ctx: Ex
 $[x3 :${emojis[find].name}:]`
 
 		console.log(emojis[find].name)
-		await env.MISSKEY_EMOJIS.put("emojiNames", gluedEmojiNames + " " + emojis[find].name)
+		await env.MISSKEY_EMOJIS.put("emojiNames", gluedEmojiNames + emojis[find].name + " ")
 		await fetch(`${env.ORIGIN}/api/notes/create`, {
 			method: 'POST',
 			headers: {
@@ -104,10 +104,10 @@ const syncallemojis = async (request: Request, env: Env, ctx: ExecutionContext):
 	const { emojis } = await miResponse.json() as { emojis: Emojis }
 
 
-	let gluedEmojiNames = ""
+	let gluedEmojiNames = " "
 
 	emojis.forEach((elem) => {
-		gluedEmojiNames += " " + elem.name
+		gluedEmojiNames += elem.name + " "
 	})
 
 	await env.MISSKEY_EMOJIS.put("emojiNames", gluedEmojiNames);
