@@ -1,0 +1,13 @@
+name = "misskey-new-emoji-bot"
+main = "src/index.ts"
+compatibility_date = "2023-02-07"
+
+
+[vars]
+ORIGIN = "your instance url"
+TOKEN = "api token"
+
+[[kv_namespaces]]
+binding = "MISSKEY_EMOJIS"
+preview_id = "your kv preview id"
+id = "your kv id"
