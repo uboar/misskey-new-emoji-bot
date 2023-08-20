@@ -1,137 +1,151 @@
-
 export interface Env {
-	ORIGIN: string
-	TOKEN: string
-	MISSKEY_EMOJIS: KVNamespace
+  ORIGIN: string;
+  TOKEN: string;
+	CHANNEL_ID: string;
+  MISSKEY_EMOJIS: KVNamespace;
 }
 
-export type Emojis = [
-	{
-		id?: string,
-		aliases: Array<string>
-		name: string
-		url: string
-		category: string
-	}
-]
+export type Emojis = {
+  id: string;
+  aliases: Array<string>;
+  name: string;
+  url: string;
+  category: string;
+  license: string;
+}[];
 
+const ping = async (
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext
+): Promise<Response> => {
+  const miResponse = await fetch(`${env.ORIGIN}/api/notes/create`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      i: env.TOKEN,
+      visibility: "followers",
+      localOnly: true,
+      text: "投稿テストです。",
+    }),
+  });
+  return new Response("ok");
+};
 
-const ping = async (request: Request, env: Env, ctx: ExecutionContext): Promise<Response> => {
-	const miResponse = await fetch(`${env.ORIGIN}/api/notes/create`, {
-		method: 'POST',
-		headers: {
-			"content-type": "application/json"
-		},
-		body: JSON.stringify({
-			i: env.TOKEN,
-			localOnly: true,
-			text: "botからの投稿テストです。"
-		})
-	})
-	return new Response('ok')
-}
+const newEmojiNote = async (
+  event: ScheduledController | null,
+  env: Env,
+  ctx: ExecutionContext
+) => {
+  const sinceId = (await env.MISSKEY_EMOJIS.get("sinceID")) as string;
 
-const newEmojiNote = async (event: ScheduledController | null, env: Env, ctx: ExecutionContext) => {
-	const miResponse = await fetch(`${env.ORIGIN}/api/admin/emoji/list`, {
-		method: 'POST',
-		headers: {
-			"content-type": "application/json"
-		},
-		body: JSON.stringify({
-			i: env.TOKEN,
-			limit: 20,
-		})
-	})
-	const emojis = await miResponse.json() as Emojis
-	console.log(JSON.stringify(emojis))
-	const gluedEmojiNames = await env.MISSKEY_EMOJIS.get("emojiNames") as string
+  if (!sinceId) return new Response("no sinceId");
 
-	let find = -1
+  const miResponse = await fetch(`${env.ORIGIN}/api/admin/emoji/list`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      i: env.TOKEN,
+      sinceId: sinceId,
+      limit: 1,
+    }),
+  });
+  const emojis = (await miResponse.json()) as Emojis;
+  console.log(JSON.stringify(emojis));
 
-	emojis.forEach((elem, index) => {
-		if (gluedEmojiNames.indexOf(" " + elem.name + " ") < 0) {
-			find = index
-		}
-	})
+  if (emojis.length <= 0) {
+    console.log("no new emoji");
+    return new Response("no new emoji");
+  } else {
+    let noteText = `新しい絵文字:${emojis[0].name}:（\`${emojis[0].name}\`）が追加されました。
+`;
 
-	if (find >= 0) {
-		let noteText = `新しい絵文字:${emojis[find].name}:（\`${emojis[find].name}\`）が追加されたかもしれません。`
+    if (emojis[0].category !== "" && emojis[0].category !== null) {
+      noteText += `この絵文字は\`${emojis[0].category}\`に分類されています。
+`;
+    }
 
-		if ((emojis[find].category !== '') && (emojis[find].category !== null)){
-			noteText += `
-この絵文字は${emojis[find].category}に分類されています。`
-		}
+    if (emojis[0].aliases[0] !== "" && emojis[0].aliases[0] !== null) {
+      noteText += `また、この絵文字は\`${emojis[0].aliases.join(
+        ", "
+      )}\`でも出す事が出来ます。
+`;
+    }
+    noteText += `$[x3 :${emojis[0].name}:]
+`;
+    if (emojis[0].license !== "" && emojis[0].license !== null) {
+			const replacedMention = emojis[0].license.replaceAll("@", "@ ")
+      noteText += `ライセンス： ${replacedMention}`;
+    }
 
-		if((emojis[find].aliases[0] !== '') && (emojis[find].aliases[0] !== null)){
+    console.log(emojis[0].name);
+    await fetch(`${env.ORIGIN}/api/notes/create`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        i: env.TOKEN,
+				channelId: env.CHANNEL_ID,
+        text: noteText,
+      }),
+    });
 
-			noteText += `
-また、この絵文字は\`${emojis[find].aliases.join(", ")}\`でも出す事が出来ます。`
-		}
+    await env.MISSKEY_EMOJIS.put("sinceID", emojis[0].id);
 
-		noteText += `
-$[x3 :${emojis[find].name}:]`
+    return new Response("ok");
+  }
+};
 
-		console.log(emojis[find].name)
-		await env.MISSKEY_EMOJIS.put("emojiNames", gluedEmojiNames + emojis[find].name + " ")
-		await fetch(`${env.ORIGIN}/api/notes/create`, {
-			method: 'POST',
-			headers: {
-				"content-type": "application/json"
-			},
-			body: JSON.stringify({
-				i: env.TOKEN,
-				localOnly: true,
-				text: noteText,
-			})
-		})
-	} else {
-		console.log("no new emojis")
-	}
-}
+const setSinceId = async (
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext
+): Promise<Response> => {
+  const { searchParams } = new URL(request.url);
+  const query = searchParams.get("sinceId");
+  if (!query) return new Response("no query");
+  await env.MISSKEY_EMOJIS.put("sinceID", query);
+  console.log(query);
+  return new Response(query);
+};
 
-const syncallemojis = async (request: Request, env: Env, ctx: ExecutionContext): Promise<Response> => {
-	const miResponse = await fetch(`${env.ORIGIN}/api/emojis`, {
-		method: 'POST',
-		headers: {
-			"content-type": "application/json"
-		},
-		body: JSON.stringify({
-			i: env.TOKEN,
-		})
-	})
-	
+const getSinceId = async (
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext
+): Promise<Response> => {
+  const sinceId = (await env.MISSKEY_EMOJIS.get("sinceID")) as string;
 
-	const { emojis } = await miResponse.json() as { emojis: Emojis }
+  console.log(sinceId);
 
-
-	let gluedEmojiNames = " "
-
-	emojis.forEach((elem) => {
-		gluedEmojiNames += elem.name + " "
-	})
-
-	await env.MISSKEY_EMOJIS.put("emojiNames", gluedEmojiNames);
-
-	return new Response(gluedEmojiNames)
-}
+  if (!sinceId) return new Response("no sinceId");
+  return new Response(sinceId);
+};
 
 export default {
-	async fetch(
-		request: Request,
-		env: Env,
-		ctx: ExecutionContext
-	): Promise<Response> {
+  async fetch(
+    request: Request,
+    env: Env,
+    ctx: ExecutionContext
+  ): Promise<Response> {
+    const url = request.url;
+    if (url.includes("ping")) return await ping(request, env, ctx);
+    // if (url.includes('syncallemojis')) return await syncallemojis(request, env, ctx)
+    if (url.includes("newemojicheck")) {
+      await newEmojiNote(null, env, ctx);
+      return new Response("ok");
+    }
+    if (url.includes("setSinceId")) return await setSinceId(request, env, ctx);
+    if (url.includes("getSinceId")) return await getSinceId(request, env, ctx);
 
-		const url = request.url
-		if (url.includes('ping')) return await ping(request, env, ctx)
-		if (url.includes('syncallemojis')) return await syncallemojis(request, env, ctx)
-		if (url.includes('newemojitest')) {
-			await newEmojiNote(null, env, ctx)
-			return new Response("ok")
-		}
-		return new Response("not found");
-	},
-	async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext) {
-		ctx.waitUntil(newEmojiNote(event, env, ctx));
-	}
+    return new Response("not found");
+  },
+  async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(newEmojiNote(event, env, ctx));
+  },
 };
