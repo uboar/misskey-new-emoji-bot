@@ -6,6 +6,7 @@ compatibility_date = "2023-02-07"
 [vars]
 ORIGIN = "your instance url"
 TOKEN = "api token"
+CHANNEL_ID = "post channel id"
 
 [[kv_namespaces]]
 binding = "MISSKEY_EMOJIS"
